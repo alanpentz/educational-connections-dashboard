@@ -86,15 +86,15 @@
         }
     </style>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-    <!-- Login Form -->
-    <div id="login-form" class="login-container">
+    <!-- Auth Form -->
+    <div id="auth-form" class="login-container">
         <h1>Educational Connections</h1>
-        <p>Please enter your access code to view the dashboard</p>
-        <input type="password" id="password" class="password-input" placeholder="Enter access code" onkeypress="handleKeyPress(event)">
-        <button onclick="checkPassword()" class="login-btn">Access Dashboard</button>
-        <div id="error-message" class="error-message">Incorrect access code. Please try again.</div>
+        <p>Please sign in to access the dashboard</p>
+        <button id="sign-in-btn" class="login-btn" onclick="signInWithEmail()">Sign In with Email</button>
+        <div id="error-message" class="error-message"></div>
     </div>
     
     <!-- Dashboard Content (Hidden Initially) -->
@@ -113,6 +113,36 @@
                 margin-bottom: 20px;
                 box-shadow: 0 10px 30px rgba(0,0,0,0.2);
                 text-align: center;
+                position: relative;
+            }
+            
+            .user-info {
+                position: absolute;
+                top: 20px;
+                right: 20px;
+                display: flex;
+                align-items: center;
+                gap: 15px;
+            }
+            
+            .user-email {
+                color: #718096;
+                font-size: 0.9em;
+            }
+            
+            .sign-out-btn {
+                background: #e53e3e;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 8px;
+                cursor: pointer;
+                font-size: 0.85em;
+                transition: background-color 0.2s;
+            }
+            
+            .sign-out-btn:hover {
+                background: #c53030;
             }
             
             h1 {
@@ -208,6 +238,10 @@
         
         <div class="dashboard">
             <div class="header">
+                <div class="user-info">
+                    <span id="user-email" class="user-email"></span>
+                    <button onclick="signOut()" class="sign-out-btn">Sign Out</button>
+                </div>
                 <h1>Educational Connections Inc.</h1>
                 <div class="subtitle">Comprehensive P&L Analysis • January - July 2025</div>
             </div>
@@ -263,35 +297,86 @@
     </div>
 
     <script>
-        // Simple password protection
-        // CHANGE THIS PASSWORD!
-        const VALID_PASSWORD = 'EC2025Dashboard';
+        // Supabase configuration
+        const SUPABASE_URL = 'https://plwgereftajzxrniwinc.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBsd2dlcmVmdGFqenhybml3aW5jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTQ5MjY4NTEsImV4cCI6MjA3MDUwMjg1MX0.a2gcWJRNrXZWJgIDGL3hT78jRakH8hRL7fteZ2_H6O0';
         
-        function checkPassword() {
-            const password = document.getElementById('password').value;
+        // Initialize Supabase client
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        
+        async function initializeAuth() {
+            // Check if user is already authenticated
+            const { data: { session } } = await supabase.auth.getSession();
             
-            if (password === VALID_PASSWORD) {
-                // Hide login form
-                document.getElementById('login-form').style.display = 'none';
-                document.body.style.alignItems = 'flex-start';
-                document.body.style.justifyContent = 'flex-start';
-                
-                // Show dashboard
-                document.getElementById('dashboard-content').style.display = 'block';
-                
-                // Initialize charts
-                initializeCharts();
+            if (session) {
+                showDashboard();
             } else {
+                showAuthForm();
+            }
+            
+            // Listen for auth changes
+            supabase.auth.onAuthStateChange((event, session) => {
+                if (session) {
+                    showDashboard();
+                } else {
+                    showAuthForm();
+                }
+            });
+        }
+        
+        function showAuthForm() {
+            document.getElementById('auth-form').style.display = 'block';
+            document.getElementById('dashboard-content').style.display = 'none';
+            document.body.style.alignItems = 'center';
+            document.body.style.justifyContent = 'center';
+        }
+        
+        async function signInWithEmail() {
+            const email = prompt('Enter your email address:');
+            if (!email) return;
+            
+            const { error } = await supabase.auth.signInWithOtp({
+                email: email,
+                options: {
+                    emailRedirectTo: window.location.href
+                }
+            });
+            
+            if (error) {
+                document.getElementById('error-message').textContent = error.message;
                 document.getElementById('error-message').style.display = 'block';
-                document.getElementById('password').value = '';
+            } else {
+                document.getElementById('error-message').textContent = 'Check your email for the sign-in link!';
+                document.getElementById('error-message').style.color = '#059669';
+                document.getElementById('error-message').style.display = 'block';
             }
         }
         
-        function handleKeyPress(event) {
-            if (event.key === 'Enter') {
-                checkPassword();
-            }
+        async function signOut() {
+            await supabase.auth.signOut();
         }
+        
+        async function showDashboard() {
+            // Hide auth form
+            document.getElementById('auth-form').style.display = 'none';
+            document.body.style.alignItems = 'flex-start';
+            document.body.style.justifyContent = 'flex-start';
+            
+            // Show dashboard
+            document.getElementById('dashboard-content').style.display = 'block';
+            
+            // Display user email
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                document.getElementById('user-email').textContent = user.email;
+            }
+            
+            // Initialize charts
+            initializeCharts();
+        }
+        
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', initializeAuth);
         
         function initializeCharts() {
             // Data
